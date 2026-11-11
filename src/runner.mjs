@@ -54,7 +54,7 @@ export class SwarmRunner extends EventEmitter {
     const { mission, maxRounds } = this.opts;
 
     if (this.board.length === 0) {
-      this.board.append({ from: '@human', to: [], type: 'note', subject: 'ミッション開始', body: mission });
+      this.board.append({ from: '@human', to: [], type: 'note', subject: 'ミッション開始', body: mission, meta: { round: 0 } });
       this.emit('post', this.board.posts.at(-1));
     }
 
@@ -80,7 +80,7 @@ export class SwarmRunner extends EventEmitter {
           continue;
         }
         for (const fields of t.posts) {
-          const post = this.#appendChecked(t.agent, fields, t.cost);
+          const post = this.#appendChecked(t.agent, fields, t.cost, round);
           if (post) this.emit('post', post);
         }
       }
@@ -90,6 +90,7 @@ export class SwarmRunner extends EventEmitter {
           from: '@human', to: [], type: 'abort',
           subject: '予算上限に達したため中断',
           body: `上限 $${this.opts.budgetUsd} に対して $${this.spentUsd.toFixed(4)} を消費しました。`,
+          meta: { round },
         });
         stop = { reason: 'budget', post: this.board.posts.at(-1) };
         break;
@@ -157,7 +158,7 @@ export class SwarmRunner extends EventEmitter {
    * 投稿を掲示板に載せる前に、役割の権限と秘密混入を検査する。
    * 違反は捨てずに note として記録する（黙って消すと原因が追えなくなる）。
    */
-  #appendChecked(agent, fields, cost) {
+  #appendChecked(agent, fields, cost, round) {
     const role = roleOf(agent);
     const reject = (why) => {
       this.emit('blocked-post', { agent, why, fields });
@@ -165,6 +166,7 @@ export class SwarmRunner extends EventEmitter {
         from: '@human', to: [agent], type: 'note',
         subject: `投稿を却下: ${why}`,
         body: `${agent} の ${fields.type} を掲示板に載せませんでした。理由: ${why}`,
+        ...(round ? { meta: { round } } : {}),
       });
       return null;
     };
@@ -196,7 +198,14 @@ export class SwarmRunner extends EventEmitter {
 
     const totalCost = cost ? { ...cost } : undefined;
     if (totalCost?.usd) this.spentUsd += Number(totalCost.usd) || 0;
-    return this.board.append({ ...fields, from: agent, ...(totalCost ? { cost: totalCost } : {}) });
+    // ラウンドを投稿に残す。あとからビューアや分析器が並行度を正確に復元できる
+    const meta = { ...(fields.meta ?? {}), ...(round ? { round } : {}) };
+    return this.board.append({
+      ...fields,
+      from: agent,
+      ...(Object.keys(meta).length ? { meta } : {}),
+      ...(totalCost ? { cost: totalCost } : {}),
+    });
   }
 }
 
