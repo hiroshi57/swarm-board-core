@@ -54,6 +54,13 @@ export const ADAPTERS = {
   }),
 
   /**
+   * ローカルの ollama。課金ゼロ・認証不要で群れを実際に走らせられる。
+   * モデルは小さいのでプロトコル遵守率は落ちるが、
+   * 「掲示板が成立するか」を実物で確かめるには十分で、何より無料。
+   */
+  ollama: (opts = {}) => ollamaAdapter(opts),
+
+  /**
    * テストとデモ用。LLM を呼ばず、台本どおりに返す。
    * CI でランナーの挙動を決定論的に検証するために必要。
    */
@@ -65,6 +72,65 @@ export function createAdapter(name, opts = {}) {
   const factory = ADAPTERS[name];
   if (!factory) throw new Error(`未知の adapter '${name}'（利用可能: ${Object.keys(ADAPTERS).join(', ')}）`);
   return factory(opts);
+}
+
+/**
+ * ローカルの ollama HTTP API を叩く。
+ *
+ * 実行は手元で完結するので、課金も認証もなしに群れを動かせる。
+ * 役割ごとにモデルを変えられる（modelFor が渡す ctx.model を優先する）。
+ *
+ * @param {object} o
+ * @param {string} [o.host] 既定 http://127.0.0.1:11434
+ * @param {string} [o.model] 既定 qwen2.5:7b-instruct
+ * @param {number} [o.numPredict] 出力トークン上限
+ * @param {number} [o.temperature]
+ * @param {number} [o.seed] 固定すると再現性が上がる
+ */
+export function ollamaAdapter({
+  host = process.env.OLLAMA_HOST || 'http://127.0.0.1:11434',
+  model = process.env.OLLAMA_MODEL || 'qwen2.5:7b-instruct',
+  numPredict = Number(process.env.OLLAMA_NUM_PREDICT || 700),
+  temperature = 0.3,
+  seed = 42,
+  timeoutMs = 10 * 60 * 1000,
+} = {}) {
+  return async function run(prompt, ctx = {}) {
+    const useModel = ctx.model ?? model;
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), timeoutMs);
+    ctx.signal?.addEventListener('abort', () => ac.abort(), { once: true });
+    let res;
+    try {
+      res = await fetch(`${host}/api/generate`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model: useModel,
+          prompt,
+          stream: false,
+          options: { num_predict: numPredict, temperature, seed },
+        }),
+        signal: ac.signal,
+      });
+    } catch (e) {
+      throw new Error(`ollama に接続できません（${host}）: ${e.message}`);
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!res.ok) throw new Error(`ollama が ${res.status} を返しました: ${(await res.text()).slice(0, 200)}`);
+    const data = await res.json();
+    return {
+      text: String(data.response ?? ''),
+      // ローカル実行なので金額は 0。トークン数は記録しておく
+      cost: {
+        model: useModel,
+        input_tokens: Number(data.prompt_eval_count) || 0,
+        output_tokens: Number(data.eval_count) || 0,
+        usd: 0,
+      },
+    };
+  };
 }
 
 /**

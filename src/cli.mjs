@@ -17,7 +17,7 @@ swarm — 掲示板で協調するマルチエージェント・ランナー
 run のオプション:
   --mission <text>    ミッション本文（--mission-file と排他）
   --mission-file <p>  ミッションをファイルから読む
-  --adapter <name>    claude | codex | gemini | antigravity | mock  （既定: claude）
+  --adapter <name>    claude | codex | gemini | antigravity | ollama | mock （既定: claude）
   --workers <n>       worker の数                                   （既定: 2）
   --verifiers <n>     verifier の数（0 は不可）                     （既定: 1）
   --max-rounds <n>    ラウンド上限                                  （既定: 12）
