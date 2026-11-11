@@ -1,0 +1,17 @@
+{
+  "name": "swarm-board-core",
+  "version": "0.1.0",
+  "description": "coordinator / worker / verifier を掲示板越しに走らせるマルチエージェント・ランナー",
+  "type": "module",
+  "main": "src/index.mjs",
+  "bin": { "swarm": "src/cli.mjs" },
+  "scripts": {
+    "test": "node --test \"test/*.test.mjs\"",
+    "demo": "node src/cli.mjs run --adapter mock --mission \"アクセスログ集計ツールを作る\" --workers 2 --out runs/demo"
+  },
+  "dependencies": {
+    "swarm-board-protocol": "github:hiroshi57/swarm-board-protocol"
+  },
+  "license": "MIT",
+  "engines": { "node": ">=20" }
+}
