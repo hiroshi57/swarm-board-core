@@ -188,6 +188,16 @@ export class SwarmRunner extends EventEmitter {
         fields = { ...fields, to: [...to, v.name] }; // 宛先漏れは却下せず補う
       }
     }
+    // 全員宛の done はミッション終了の合図。合格した成果がひとつも無いうちは認めない。
+    // 小さいモデルは 1 ラウンド目に「ミッション開始」のつもりで done を出すことがあり、
+    // これを通すと何も作られないまま成功として終わってしまう（実測で確認した）。
+    if (fields.type === 'done' && role === 'coordinator' && (fields.to?.length ?? 0) === 0) {
+      const passed = this.board.posts.some((p) => p.type === 'verify_result' && p.verdict === 'pass');
+      if (!passed) {
+        return reject('verifier の pass がひとつも無いのにミッション完了を宣言しています。終了は全タスクが合格してから');
+      }
+    }
+
     for (const field of ['subject', 'body']) {
       const hits = findSecrets(fields[field]);
       if (hits.length > 0) return reject(`${field} に秘密情報（${hits[0].label}）が含まれています`);
